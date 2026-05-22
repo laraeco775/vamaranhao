@@ -1,0 +1,246 @@
+---
+title: "UntitledParticipação Setorial no Valor Adicionado do Estado do Maranhão"
+author: "Lara Angelina"
+format: html
+editor: visual
+---
+
+**INTRODUÇÃO**
+
+Este trabalho examina a participação dos setores econômicos no *Valor Adicionado do Estado do Maranhão*, tomando como referência o ano que apresenta a série histórica mais abrangente disponível. Os scripts utilizados no processamento dos dados foram inicialmente elaborados pelo professor Caio para o estudo do estado do Piauí (2021). Para a presente análise, foram feitas adaptações específicas no código a fim de adequá-lo às características da base de dados do Maranhão, preservando a estrutura e a consistência do modelo analítico original.\
+
+**PACOTES NECESSÁRIOS**
+
+```{r message=FALSE}
+library(sidrar)
+library(tidyverse)
+library(geobr)
+library(sf)
+library(patchwork)
+library(DT)
+
+```
+
+**COLETA DE DADOS**
+
+A função `get_sidra()` foi utilizada para acessar diretamente os dados disponibilizados pelo IBGE. Para cada setor econômico analisado, empregou-se a tabela `5938`, referente ao PIB dos Municípios, considerando o ano 2021 por meio do parâmetro `period = "2021"`. Além disso, foi aplicado o filtro `list("State" = 21)`, responsável por limitar a consulta apenas aos municípios pertencentes ao estado do Maranhão, identificado pelo código 21.
+
+Na sequência, os setores foram tratados individualmente. Como exemplo, no comando `agro <- get_sidra()`, realiza-se a extração das informações da tabela `5938`, especificando a variável desejada com `variable = 513`, correspondente à Agropecuária. Os resultados obtidos são armazenados no objeto agro, o que facilita sua utilização nas etapas seguintes da análise. A mesma metodologia foi adotada para os demais setores econômicos presentes no estudo.
+
+```{r message=FALSE}
+va <- get_sidra(
+  x        = 5938,
+  variable = 498,
+  period   = "2021",
+  geo      = "City",
+  geo.filter = list("State" = 21)
+) |>
+  select(Município, `Município (Código)`, Valor) |>
+  rename(va = Valor, code_muni = `Município (Código)`, MUN = Município) |>
+  mutate(code_muni = as.double(code_muni))
+
+agro <- get_sidra(
+  x        = 5938,
+  variable = 513,
+  period   = "2021",
+  geo      = "City",
+  geo.filter = list("State" = 21)
+) |>
+  select(Município, `Município (Código)`, Valor) |>
+  rename(va_agro = Valor, code_muni = `Município (Código)`, MUN = Município) |>
+  mutate(code_muni = as.double(code_muni))
+
+
+ind <- get_sidra(
+  x        = 5938,
+  variable = 517,
+  period   = "2021",
+  geo      = "City",
+  geo.filter = list("State" = 21)
+) |>
+  select(Município, `Município (Código)`, Valor) |>
+  rename(va_ind = Valor, code_muni = `Município (Código)`, MUN = Município) |>
+  mutate(code_muni = as.double(code_muni))
+
+serv1 <- get_sidra(
+  x        = 5938,
+  variable = 6575,
+  period   = "2021",
+  geo      = "City",
+  geo.filter = list("State" = 21)
+) |>
+  select(Município, `Município (Código)`, Valor) |>
+  rename(va_serv1 = Valor, code_muni = `Município (Código)`, MUN = Município) |>
+  mutate(code_muni = as.double(code_muni))
+
+serv2 <- get_sidra(
+  x        = 5938,
+  variable = 525,
+  period   = "2021",
+  geo      = "City",
+  geo.filter = list("State" = 21)
+) |>
+  select(Município, `Município (Código)`, Valor) |>
+  rename(va_serv2 = Valor, code_muni = `Município (Código)`, MUN = Município) |>
+  mutate(code_muni = as.double(code_muni))
+
+serv <- inner_join(serv1, serv2, by = c("code_muni", "MUN")) |>
+  mutate(va_serv = va_serv1 + va_serv2) |>
+  select(code_muni, MUN, va_serv )
+
+rm(serv1, serv2)
+
+participacao <- va |>
+  inner_join(agro, by = c("code_muni", "MUN")) |>
+  inner_join(ind,  c("code_muni", "MUN")) |>
+  inner_join(serv, c("code_muni", "MUN")) |>
+  mutate(
+    part_agro = va_agro / va,
+    part_ind  = va_ind  / va,
+    part_serv = va_serv / va
+  ) |>
+  select(code_muni, MUN, part_agro, part_ind, part_serv)
+```
+
+Ao contrário da Agropecuária e da Indústria, que já são disponibilizadas de forma consolidada, o setor de Serviços no IBGE encontra-se desagregado em duas partes. Para chegar ao valor agregado total, foi necessário realizar um procedimento de integração dos dados.Primeiramente, foram criados dois objetos no R — `serv1` e `serv2` — utilizados como bases temporárias para armazenar separadamente as informações de serviços da administração pública e dos demais serviços.
+
+Na etapa seguinte, empregou-se o `inner_join` para unir essas duas bases, assegurando que os registros de cada município fossem corretamente correspondidos. Com os dados integrados, utilizou-se a função `mutate` para somar as duas parcelas e construir a variável final do setor de Serviços.Por fim, os objetos auxiliares foram eliminados com o comando `rm`, contribuindo para a organização do ambiente de trabalho e mantendo apenas o resultado final necessário para a análise.
+
+**CONSTRUÇÃO DO MAPA**
+
+Nesta etapa final, os dados foram transformados em representações visuais. Inicialmente, utilizou-se a função read_municipality para obter a malha territorial do estado do Maranhão, seguida do`left_join`, que permitiu integrar as informações econômicas à base cartográfica. Em seguida, foram elaborados três mapas (m1, m2 e m3), cada um representando um setor econômico com uma coloração distinta, de modo a facilitar a identificação visual: verde para a Agropecuária, azul para a Indústria e tons de laranja/vermelho para o setor de Serviços. Por fim, os mapas foram combinados por meio do operador `+`, permitindo a visualização simultânea dos três setores. Essa organização possibilita uma comparação direta do comportamento das atividades econômicas em cada município do estado.
+
+```{r message=FALSE}
+ma_muni <- read_municipality(code_muni = 21, year = 2020)
+
+ma_map <- ma_muni |>left_join(participacao, by = "code_muni")
+
+m1 <- ggplot(ma_map, aes(fill = part_agro)) +
+  geom_sf() +
+  scale_fill_distiller(palette = "Greens", direction = 1, labels = scales::percent) +
+  labs(title = "Agropecuária", fill = NULL) +
+  theme_void()
+
+m2 <- ggplot(ma_map, aes(fill = part_ind)) +
+  geom_sf() +
+  scale_fill_distiller(palette = "Blues", direction = 1, labels = scales::percent) +
+  labs(title = "Indústria", fill = NULL) +
+  theme_void()
+
+m3 <- ggplot(ma_map, aes(fill = part_serv)) +
+  geom_sf() +
+  scale_fill_distiller(palette = "Oranges", direction = 1, labels = scales::percent) +
+  labs(title = "Serviços", fill = NULL) +
+  theme_void()
+
+m1 + m2 + m3 +
+  plot_annotation(title = "Participação setorial no Valor Adicionado — Maranhão (2021)", caption = "Fonte: SIDRA/IBGE  |  Elaboração: Lara Angelina -UFPI" 
+  ) 
+```
+
+\
+**PARTICIPAÇÃO MUNICIPAL NOS SETORES**
+
+Participação municipal nos setores\
+Nesta etapa, buscou-se identificar a especialização econômica dos municípios do Maranhão, destacando o setor predominante em cada localidade. Inicialmente, foi realizada a integração da base cartográfica com os dados econômicos por meio do comando `mapa_ma_final <- ma_muni |> left_join(participacao, by = "code_muni")`, garantindo a correspondência entre as informações geográficas e os indicadores setoriais.
+
+Em seguida, aplicou-se a estrutura `mutate(setor_dominante = case_when(...))`, que permitiu comparar as participações da Agropecuária, Indústria e Serviços e, assim, classificar cada município de acordo com sua principal atividade econômica.
+
+Para a etapa de visualização, utilizou-se `ma_pontos <- st_centroid(mapa_ma_final)`, representando os municípios a partir de seus centroides. Essa abordagem evita distorções visuais causadas por diferenças de área territorial e facilita a análise da distribuição espacial das atividades econômicas.
+
+Por fim, foi gerado um mapa interativo por meio do comando `mapa_interativo <- ggplotly(m4, tooltip = "text")`, no qual as cores indicam o setor predominante e a interação permite ao usuário consultar, em tempo real, os percentuais de cada atividade econômica ao passar o cursor sobre os municípios.
+
+```{r message=FALSE}
+
+mapa_ma_final <- ma_muni |>
+  left_join(participacao, by = "code_muni")
+
+mapa_ma_final <- mapa_ma_final |> 
+  mutate(setor_dominante = case_when(
+    part_agro > part_ind & part_agro > part_serv ~ "Agropecuária",
+    part_ind > part_agro & part_ind > part_serv ~ "Indústria",
+    TRUE ~ "Serviços"
+  ))
+
+
+ma_pontos <- st_centroid(mapa_ma_final)
+
+library(ggplot2)
+
+#install.packages("plotly")
+
+library(plotly)
+
+
+m4 <- ggplot() +
+  
+  geom_sf(data = ma_muni, fill = "gray48", color = "white") +
+  
+  geom_sf(data = ma_pontos, aes(
+    color = setor_dominante,
+    text = paste("Município:", MUN, 
+                 "<br>Setor Principal:", setor_dominante,
+                 "<br>Agro:", scales::percent(part_agro, accuracy = 0.1),
+                 "<br>Indústria:", scales::percent(part_ind, accuracy = 0.1),
+                 "<br>Serviços:", scales::percent(part_serv, accuracy = 0.1))
+  ), size = 3, alpha = 0.7) +
+  
+  scale_color_manual(values = c("Agropecuária" = "green", 
+                                "Indústria" = "blue", 
+                                "Serviços" = "orange")
+  ) +
+  
+  labs(
+    title ="Setores Dominantes nos Municípios do Maranhão",
+    caption = "Elaboração: Lara Angelina- UFPI | Dados:SIDRA/IBGE",
+    color = "Setor Dominante") + theme_void()
+  
+    mapa_interativo <- ggplotly(m4, tooltip = "text")
+
+    mapa_interativo
+
+```
+
+**TABELA DE PARTICIPAÇÃO MUNICIPAL NOS SETORES**
+
+```{r message=FALSE,warning=FALSE}
+participacao |>
+  mutate(
+    part_agro = scales::percent(part_agro, accuracy = 0.1),
+    part_ind  = scales::percent(part_ind,  accuracy = 0.1),
+    part_serv = scales::percent(part_serv, accuracy = 0.1)
+  ) |>
+  select(
+    Município = MUN,
+    Agropecuária = part_agro,
+    Indústria = part_ind,
+    Serviços = part_serv
+  ) |>
+  knitr::kable(
+    caption = "Participação setorial no Valor Adicionado dos municípios do Maranhão — 2021"
+  )
+```
+
+```{r message=FALSE,warning= FALSE}
+participacao |>
+  mutate(
+    part_agro = scales::percent(part_agro, accuracy = 0.1),
+    part_ind  = scales::percent(part_ind,  accuracy = 0.1),
+    part_serv = scales::percent(part_serv, accuracy = 0.1)
+  ) |>
+  select(
+    Município = MUN,
+    Agropecuária = part_agro,
+    Indústria = part_ind,
+    Serviços = part_serv
+  ) |>
+  datatable(
+    caption = "Participação setorial no Valor Adicionado dos municípios do Maranhão — 2021",
+    rownames = FALSE,
+    filter = "top",
+    options = list(
+      pageLength = 10,
+      language = list(url = "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json")
+    )
+  )
+```
