@@ -244,3 +244,64 @@ participacao |>
     )
   )
 ```
+
+**DISTRIBUIÇÃO DA PARTICIPAÇÃO SETORIAL NOS MUNICÍPIOS DO MARANHÃO (2021)**
+
+Os histogramas apresentados permitem observar a distribuição da participação dos setores econômicos nos municípios do Maranhão em 2021, complementando a análise espacial realizada anteriormente por meio dos mapas. Essa visualização evidencia como as atividades econômicas se comportam de forma diferenciada entre os municípios do estado.
+
+A Agropecuária apresenta maior concentração em determinadas localidades, indicando municípios com forte dependência das atividades primárias. A Indústria, por sua vez, possui participação mais restrita e concentrada em um número reduzido de municípios, refletindo a desigual distribuição da atividade industrial no território maranhense.
+
+Já o setor de Serviços demonstra participação mais elevada e disseminada entre os municípios, evidenciando seu papel predominante na economia estadual. Em conjunto, os histogramas permitem identificar padrões de especialização econômica e reforçam a heterogeneidade produtiva existente entre os municípios do Maranhão.
+
+```{r}
+dados_hist <- participacao |>
+  pivot_longer(
+    cols = c(part_agro, part_ind, part_serv),
+    names_to = "setor",
+    values_to = "participacao"
+  ) |>
+  mutate(
+    setor = recode(
+      setor,
+      part_agro = "Agropecuária",
+      part_ind  = "Indústria",
+      part_serv = "Serviços"
+    )
+  )
+
+ggplot(dados_hist,
+       aes(x = participacao,
+           fill = setor)) +
+  
+  geom_histogram(
+    bins = 20,
+    color = "white",
+    alpha = 0.8
+  ) +
+  
+  facet_wrap(~ setor, scales = "free_y") +
+  
+  scale_x_continuous(labels = scales::percent) +
+  
+  scale_fill_manual(values = c(
+    "Agropecuária" = "darkgreen",
+    "Indústria" = "steelblue",
+    "Serviços" = "darkorange"
+  )) +
+  
+  labs(
+    title = "Distribuição da participação setorial nos municípios do Maranhão (2021)",
+    subtitle = "Comparação entre Agropecuária, Indústria e Serviços",
+    x = "Participação no Valor Adicionado",
+    y = "Número de municípios",
+    caption = "Fonte: SIDRA/IBGE | Elaboração: Lara Angelina - UFPI"
+  ) +
+  
+  theme_minimal() +
+  
+  theme(
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+```
